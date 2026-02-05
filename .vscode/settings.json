@@ -17,5 +17,6 @@
     "--compile-commands-dir=${workspaceFolder}\\build"
   ],
   "idf.flashType": "JTAG",
-  "C_Cpp.errorSquiggles": "enabled"
+  "C_Cpp.errorSquiggles": "enabled",
+  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf"
 }
