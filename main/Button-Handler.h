@@ -5,17 +5,18 @@
 #include "freertos/queue.h"
 #include "esp_timer.h"
 
-
 void send_sample_data_packet(void);
 int64_t now_us(void);
 
-// Button event types
-typedef enum { BUTTON_SHORT_PRESS, BUTTON_LONG_PRESS } button_event_t;
+typedef enum {
+    BUTTON_SHORT_PRESS,
+    BUTTON_LONG_PRESS
+} button_event_t;
 
 static QueueHandle_t button_event_queue = NULL;
 static volatile int64_t last_button_press_us = 0;
 
-static void IRAM_ATTR button_isr_handler(void* arg) {
+static void IRAM_ATTR button_isr_handler(void *arg) {
     int64_t n = now_us();
     if ((n - last_button_press_us) > BUTTON_DEBOUNCE_MS * 1000) {
         last_button_press_us = n;
@@ -24,7 +25,7 @@ static void IRAM_ATTR button_isr_handler(void* arg) {
     }
 }
 
-static void button_task(void* arg) {
+static void button_task(void *arg) {
     button_event_t e;
     int64_t start = 0;
     bool pressed = false;
@@ -36,7 +37,9 @@ static void button_task(void* arg) {
                 pressed = true;
                 while (gpio_get_level(BOOT_BUTTON_PIN) == 0) {
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    if ((now_us() - start) > BUTTON_LONG_PRESS_MS * 1000) break;
+                    if ((now_us() - start) > BUTTON_LONG_PRESS_MS * 1000) {
+                        break;
+                    }
                 }
                 if (pressed) {
                     pressed = false;

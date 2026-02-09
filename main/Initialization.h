@@ -6,7 +6,6 @@
 #include "time.h"
 #include "sys/time.h"
 
-
 void send_data_packet(void);
 float turbidity_read_voltage(void);
 int turbidity_get_status(float v);
@@ -23,7 +22,7 @@ extern node_role_t role;
 void initialize_sntp(void) {
     static bool sntp_started = false;
     if (sntp_started) {
-        ESP_LOGW(TAG, "SNTP already running — skipping reinit");
+        ESP_LOGW(TAG, "SNTP already running - skipping reinit");
         return;
     }
 
@@ -41,7 +40,6 @@ void initialize_sntp(void) {
 
     sntp_started = true;
 
-    // Wait for time sync once
     time_t now = 0;
     struct tm ti = {0};
     int retry = 0;
@@ -51,17 +49,18 @@ void initialize_sntp(void) {
         localtime_r(&now, &ti);
     }
 
-    if (ti.tm_year >= (2016 - 1900))
+    if (ti.tm_year >= (2016 - 1900)) {
         ESP_LOGI(TAG, "SNTP time synchronized");
-    else
+    } else {
         ESP_LOGW(TAG, "SNTP time sync timeout");
+    }
 }
 
 void process_auto_send(void) {
     if (role == ROLE_ROOT) {
         float v = turbidity_read_voltage();
         if (!turbidity_sensor_present) {
-            ESP_LOGW(TAG, "No turbidity — skip root autosend");
+            ESP_LOGW(TAG, "No turbidity - skip root autosend");
             return;
         }
         int st = turbidity_get_status(v);

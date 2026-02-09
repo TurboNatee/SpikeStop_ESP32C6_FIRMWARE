@@ -4,7 +4,6 @@
 #include "esp_now.h"
 #include "esp_wifi.h"
 
-// Forward declarations
 bool mac_equal(const uint8_t a[6], const uint8_t b[6]);
 bool mac_is_zero(const uint8_t mac[6]);
 void blink_orange(int times);
@@ -18,7 +17,9 @@ extern volatile bool parent_link_up;
 extern volatile int64_t last_parent_seen_us;
 
 static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status) {
-    if (!mac) return;
+    if (!mac) {
+        return;
+    }
     static int parent_fail_count = 0;
     if (status == ESP_NOW_SEND_SUCCESS) {
         if (!mac_equal(mac, (uint8_t[6]){0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})) {
@@ -37,7 +38,9 @@ static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status) {
 }
 
 static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-    if (!info || !data || len < (int)sizeof(mesh_hdr_t)) return;
+    if (!info || !data || len < (int)sizeof(mesh_hdr_t)) {
+        return;
+    }
     int8_t rssi = info->rx_ctrl->rssi;
     const uint8_t *from = info->src_addr;
     mesh_hdr_t *hdr = (mesh_hdr_t*)data;
@@ -51,7 +54,9 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
             if (role != ROLE_ROOT) {
                 if (parent_link_up && mac_equal(from, parent_mac)) {
                     last_parent_seen_us = now_us();
-                    if (rssi > best_beacon_rssi) best_beacon_rssi = rssi;
+                    if (rssi > best_beacon_rssi) {
+                        best_beacon_rssi = rssi;
+                    }
                     break;
                 }
                 bool better = (!parent_link_up) || (rssi > (best_beacon_rssi + 5));

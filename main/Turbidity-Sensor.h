@@ -3,8 +3,6 @@
 
 #include "esp_adc/adc_oneshot.h"
 
-// Turbidity Sensor (ADC)
-// ESP32-C6: ADC_UNIT_1, ADC_CHANNEL_0 = GPIO1
 static bool turbidity_sensor_present = false;
 #define TURBIDITY_CH ADC_CHANNEL_0
 #define CLEAR_THRESHOLD   2.90f
@@ -26,9 +24,13 @@ static float turbidity_read_voltage(void) {
 }
 
 static int turbidity_get_status(float v) {
-    if (v > CLEAR_THRESHOLD) return 0;
-    else if (v > CLOUDY_THRESHOLD) return 1;
-    else return 2;
+    if (v > CLEAR_THRESHOLD) {
+        return 0;
+    }
+    if (v > CLOUDY_THRESHOLD) {
+        return 1;
+    }
+    return 2;
 }
 
 #endif 

@@ -8,7 +8,6 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 
-
 void init_data_timer(void);
 void init_alert_timer(void);
 void initialize_sntp(void);
@@ -36,7 +35,6 @@ extern volatile bool parent_link_up;
 extern int8_t best_beacon_rssi;
 extern QueueHandle_t influxdb_queue;
 
-
 void root_beacon_task(void *arg) {
     uint8_t bmac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     setup_broadcast_peer(current_channel);
@@ -61,17 +59,15 @@ void root_beacon_task(void *arg) {
     }
 }
 
-
 void child_task(void *arg) {
     setup_broadcast_peer(current_channel);
     int scan_attempts = 0;
     int64_t last_root_attempt_us = 0;
-    const int64_t ROOT_ATTEMPT_INTERVAL_US = 15000000; // 15s
+    const int64_t ROOT_ATTEMPT_INTERVAL_US = 15000000;
 
     while (1) {
         int64_t n = now_us();
 
-        // Parent timeout => restart fast
         if (parent_link_up && (n - last_parent_seen_us) > (int64_t)PARENT_LOSS_MS * 1000) {
             restart_node("Parent timeout");
         }
@@ -79,7 +75,6 @@ void child_task(void *arg) {
             restart_node("Stale parent state");
         }
 
-        // Try to become root every 15s if isolated or link is down
         if ((role == ROLE_ISOLATED || !parent_link_up) && (n - last_root_attempt_us) > ROOT_ATTEMPT_INTERVAL_US) {
             last_root_attempt_us = n;
             esp_wifi_disconnect();
@@ -117,7 +112,6 @@ void child_task(void *arg) {
             }
         }
 
-        // Scan hopping while isolated
         if (role == ROLE_ISOLATED || !parent_link_up) {
             scan_attempts++;
             if (scan_attempts % 30 == 0) {

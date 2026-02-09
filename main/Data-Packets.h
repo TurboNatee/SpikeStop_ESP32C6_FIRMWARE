@@ -4,7 +4,6 @@
 #include "string.h"
 #include "stdio.h"
 
-// Forward declarations
 void queue_influxdb_data(const char *node_mac, int sensor_value, int temperature, int8_t rssi, int hops);
 bool mac_is_zero(const uint8_t mac[6]);
 esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel);
@@ -23,7 +22,6 @@ extern uint8_t parent_mac[6];
 extern uint8_t current_channel;
 extern node_role_t role;
 
-// ========= Packet Types =========
 typedef enum {
     PKT_BEACON = 1,
     PKT_JOIN_REQUEST,
@@ -74,39 +72,51 @@ typedef struct {
 } __attribute__((packed)) alert_notify_pkt_t;
 
 void send_data_packet(void) {
-    if (parent_link_up && !mac_is_zero(parent_mac)) {
-        float v = turbidity_read_voltage();
-        if (!turbidity_sensor_present) {
-            ESP_LOGW(TAG, "No turbidity sensor — skip");
-            return;
-        }
-        int status = turbidity_get_status(v);
-        int sensor_value = (int)(v * 100.0f);
-        int temp = 25;
-        const char *state_str = (status == 0) ? "CLEAR" : (status == 1) ? "CLOUDY" : "DIRTY";
-
-        data_pkt_t d = {0};
-        d.hdr.type = PKT_DATA;
-        d.hdr.max_hops = 8;
-        memcpy(d.src_mac, my_mac, 6);
-        snprintf((char*)d.payload, sizeof(d.payload), "Node:%02x%02x SENSOR:%d TEMP:%dC STATUS:%s",
-                 my_mac[4], my_mac[5], sensor_value, temp, state_str);
-
-        ensure_peer(parent_mac, current_channel);
-        if (reliable_send(parent_mac, &d, sizeof(d), SEND_RETRY_LIMIT)) {
-            set_led(255, 255, 255);
-            vTaskDelay(pdMS_TO_TICKS(60));
-            if (role == ROLE_CHILD) led_child();
-            else if (role == ROLE_ROOT) led_root();
-        }
-    } else if (role == ROLE_ISOLATED) {
-        for (int i = 0; i < 2; i++) {
+    if (!(parent_link_up && !mac_is_zero(parent_mac))) {
+        if (role == ROLE_ISOLATED) {
+            for (int i = 0; i < 2; i++) {
+                led_isolated();
+                vTaskDelay(pdMS_TO_TICKS(100));
+                set_led(0, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
             led_isolated();
-            vTaskDelay(pdMS_TO_TICKS(100));
-            set_led(0, 0, 0);
-            vTaskDelay(pdMS_TO_TICKS(100));
         }
-        led_isolated();
+        return;
+    }
+
+    float v = turbidity_read_voltage();
+    if (!turbidity_sensor_present) {
+        ESP_LOGW(TAG, "No turbidity sensor - skip");
+        return;
+    }
+    int status = turbidity_get_status(v);
+    int sensor_value = (int)(v * 100.0f);
+    int temp = 25;
+    const char *state_str = (status == 0) ? "CLEAR" : (status == 1) ? "CLOUDY" : "DIRTY";
+
+    data_pkt_t d = {0};
+    d.hdr.type = PKT_DATA;
+    d.hdr.max_hops = 8;
+    memcpy(d.src_mac, my_mac, 6);
+    snprintf((char *)d.payload,
+             sizeof(d.payload),
+             "Node:%02x%02x SENSOR:%d TEMP:%dC STATUS:%s",
+             my_mac[4],
+             my_mac[5],
+             sensor_value,
+             temp,
+             state_str);
+
+    ensure_peer(parent_mac, current_channel);
+    if (reliable_send(parent_mac, &d, sizeof(d), SEND_RETRY_LIMIT)) {
+        set_led(255, 255, 255);
+        vTaskDelay(pdMS_TO_TICKS(60));
+        if (role == ROLE_CHILD) {
+            led_child();
+        } else if (role == ROLE_ROOT) {
+            led_root();
+        }
     }
 }
 
@@ -122,16 +132,26 @@ void send_sample_data_packet(void) {
         d.hdr.type = PKT_DATA;
         d.hdr.max_hops = 8;
         memcpy(d.src_mac, my_mac, 6);
-        snprintf((char*)d.payload, sizeof(d.payload), "Node:%02x%02x SENSOR:%d TEMP:%dC STATUS:%s SAMPLE",
-                 my_mac[4], my_mac[5], sample_sensor_value, sample_temp, "CLEAR");
+        snprintf((char *)d.payload,
+                 sizeof(d.payload),
+                 "Node:%02x%02x SENSOR:%d TEMP:%dC STATUS:%s SAMPLE",
+                 my_mac[4],
+                 my_mac[5],
+                 sample_sensor_value,
+                 sample_temp,
+                 "CLEAR");
         ensure_peer(parent_mac, current_channel);
         reliable_send(parent_mac, &d, sizeof(d), SEND_RETRY_LIMIT);
     }
     set_led(255, 255, 0);
     vTaskDelay(pdMS_TO_TICKS(100));
-    if (role == ROLE_ROOT) led_root();
-    else if (role == ROLE_CHILD) led_child();
-    else led_isolated();
+    if (role == ROLE_ROOT) {
+        led_root();
+    } else if (role == ROLE_CHILD) {
+        led_child();
+    } else {
+        led_isolated();
+    }
 }
 
 #endif 

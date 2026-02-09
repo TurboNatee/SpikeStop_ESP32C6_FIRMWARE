@@ -6,7 +6,6 @@
 #include "esp_netif.h"
 #include "esp_log.h"
 
-// Forward declarations
 void root_beacon_task(void *arg);
 void init_data_timer(void);
 void init_alert_timer(void);
@@ -58,11 +57,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(app_events, EVT_WIFI_OK);
-        ESP_LOGI(TAG, "Got IP — Wi-Fi connected successfully");
-
-        // Auto-promotion logic
+        ESP_LOGI(TAG, "Got IP - Wi-Fi connected successfully");
         if (role == ROLE_CHILD || role == ROLE_ISOLATED) {
-            ESP_LOGI(TAG, "Child/isolated node connected to router — promoting to ROOT");
+            ESP_LOGI(TAG, "Child/isolated node connected to router - promoting to ROOT");
             role = ROLE_ROOT;
             memcpy(root_mac, my_mac, 6);
             memcpy(parent_mac, my_mac, 6);
@@ -79,10 +76,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         }
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         if (role == ROLE_ROOT) {
-            ESP_LOGW(TAG, "Root lost Wi-Fi — restarting to re-establish router link");
+            ESP_LOGW(TAG, "Root lost Wi-Fi - restarting to re-establish router link");
             esp_restart();
         } else {
-            ESP_LOGW(TAG, "Child lost Wi-Fi — staying in mesh mode and retrying router every 5s");
+            ESP_LOGW(TAG, "Child lost Wi-Fi - staying in mesh mode and retrying router every 5s");
 
             static bool reconnect_task_started = false;
             if (!reconnect_task_started) {
@@ -128,7 +125,7 @@ static esp_err_t wifi_init_sta_or_child(bool *joined_router, uint8_t *out_channe
             ESP_LOGI(TAG, "Connected to router (ch %d)", *out_channel);
         }
     } else {
-        ESP_LOGW(TAG, "Router connection timeout — entering child scanning mode");
+        ESP_LOGW(TAG, "Router connection timeout - entering child scanning mode");
         reset_wifi_stack();
     }
 

@@ -7,22 +7,29 @@
 #include "stdlib.h"
 #include "esp_timer.h"
 
-
 esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel);
 bool reliable_send(const uint8_t *mac, const void *data, size_t len, int retries);
 void set_led(uint8_t r, uint8_t g, uint8_t b);
 void led_root(void);
 
-static bool parse_mac_string(const char* mac_str, uint8_t* mac_bytes) {
+static bool parse_mac_string(const char *mac_str, uint8_t *mac_bytes) {
     int v[6];
     if (strchr(mac_str, ':')) {
-        if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) return false;
+        if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x",
+                   &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) {
+            return false;
+        }
     } else if (strchr(mac_str, '-')) {
-        if (sscanf(mac_str, "%x-%x-%x-%x-%x-%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) return false;
+        if (sscanf(mac_str, "%x-%x-%x-%x-%x-%x",
+                   &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6) {
+            return false;
+        }
     } else {
         char hp[3] = {0};
         for (int i = 0; i < 6; i++) {
-            if ((int)strlen(mac_str) < (i * 2 + 2)) return false;
+            if ((int)strlen(mac_str) < (i * 2 + 2)) {
+                return false;
+            }
             hp[0] = mac_str[i * 2];
             hp[1] = mac_str[i * 2 + 1];
             v[i] = strtol(hp, NULL, 16);
@@ -50,9 +57,11 @@ void send_alert_notification(const uint8_t target_mac[6], float delta) {
     }
 }
 
-static void process_alert_response(const char* response, int length) {
+static void process_alert_response(const char *response, int length) {
     char buf[4096];
-    if (length > (int)sizeof(buf) - 1) length = sizeof(buf) - 1;
+    if (length > (int)sizeof(buf) - 1) {
+        length = sizeof(buf) - 1;
+    }
     memcpy(buf, response, length);
     buf[length] = '\0';
 
@@ -63,10 +72,14 @@ static void process_alert_response(const char* response, int length) {
     char *saveptr = NULL;
     char *line = strtok_r(buf, "\n", &saveptr);
 
-    while (line && strstr(line, "node") == NULL) line = strtok_r(NULL, "\n", &saveptr);
+    while (line && strstr(line, "node") == NULL) {
+        line = strtok_r(NULL, "\n", &saveptr);
+    }
 
     while ((line = strtok_r(NULL, "\n", &saveptr)) != NULL) {
-        if (strlen(line) < 5) continue;
+        if (strlen(line) < 5) {
+            continue;
+        }
         char *fields[10];
         int fc = 0;
         char *t = strtok(line, ",");
@@ -96,16 +109,19 @@ static void process_alert_response(const char* response, int length) {
             }
         }
     }
-    if (alerts_sent > 0) ESP_LOGI(TAG, "Sent %d alert(s)", alerts_sent);
+    if (alerts_sent > 0) {
+        ESP_LOGI(TAG, "Sent %d alert(s)", alerts_sent);
+    }
 }
 
 static esp_err_t poll_alerts_from_influxdb(void) {
     char url[512];
     snprintf(url, sizeof(url), "%s/api/v2/query?org=%s", INFLUXDB_URL, INFLUXDB_ORG);
     char query[512];
-    snprintf(query, sizeof(query),
-        "from(bucket:\"%s\") |> range(start: -10s) |> filter(fn: (r) => r._measurement == \"alert\" and r._field == \"active\" and r._value == true) |> last() |> keep(columns: [\"_time\", \"node\", \"_value\"]) |> yield()",
-        ALERTS_DB);
+    snprintf(query,
+             sizeof(query),
+             "from(bucket:\"%s\") |> range(start: -10s) |> filter(fn: (r) => r._measurement == \"alert\" and r._field == \"active\" and r._value == true) |> last() |> keep(columns: [\"_time\", \"node\", \"_value\"]) |> yield()",
+             ALERTS_DB);
 
     esp_http_client_config_t cfg = {
         .url = url,
@@ -151,7 +167,9 @@ static esp_err_t poll_alerts_from_influxdb(void) {
     resp[total] = '\0';
 
     if (code == 200 && total > 0) {
-        if (strstr(resp, "true")) process_alert_response(resp, total);
+        if (strstr(resp, "true")) {
+            process_alert_response(resp, total);
+        }
     } else if (code != 200) {
         ESP_LOGE(TAG, "HTTP %d", code);
     }

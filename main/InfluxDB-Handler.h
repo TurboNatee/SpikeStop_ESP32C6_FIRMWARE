@@ -8,7 +8,6 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-// InfluxDB Queue Structure
 typedef struct {
     char node_mac[18];
     int sensor_value;
@@ -30,7 +29,7 @@ static esp_err_t send_batch_to_influxdb(const char *batch_data) {
         ESP_LOGW(TAG, "Wi-Fi not connected, skip upload");
         return ESP_FAIL;
     }
-    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (!netif) {
         ESP_LOGW(TAG, "No netif");
         return ESP_FAIL;
@@ -101,16 +100,25 @@ static void influxdb_task(void *arg) {
             char dash[18];
             int j = 0;
 
-            // first point
             for (int i = 0; i < (int)strlen(ptr->node_mac) && j < (int)sizeof(dash) - 1; i++) {
                 dash[j++] = (ptr->node_mac[i] == ':') ? '-' : ptr->node_mac[i];
             }
             dash[j] = '\0';
 
             time_t now = time(NULL);
-            if (now < 1000000000) now = 1764614280;
-            snprintf(lp, sizeof(lp), "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
-                     INFLUXDB_MEASUREMENT, dash, ptr->temperature, ptr->sensor_value, ptr->rssi, ptr->hops, (long long)now);
+            if (now < 1000000000) {
+                now = 1764614280;
+            }
+            snprintf(lp,
+                     sizeof(lp),
+                     "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
+                     INFLUXDB_MEASUREMENT,
+                     dash,
+                     ptr->temperature,
+                     ptr->sensor_value,
+                     ptr->rssi,
+                     ptr->hops,
+                     (long long)now);
             strcat(batch, lp);
             batch_count++;
 
@@ -123,9 +131,19 @@ static void influxdb_task(void *arg) {
                     dash[j] = '\0';
 
                     now = time(NULL);
-                    if (now < 1000000000) now = 1764614280;
-                    snprintf(lp, sizeof(lp), "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
-                             INFLUXDB_MEASUREMENT, dash, ptr->temperature, ptr->sensor_value, ptr->rssi, ptr->hops, (long long)now);
+                    if (now < 1000000000) {
+                        now = 1764614280;
+                    }
+                    snprintf(lp,
+                             sizeof(lp),
+                             "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
+                             INFLUXDB_MEASUREMENT,
+                             dash,
+                             ptr->temperature,
+                             ptr->sensor_value,
+                             ptr->rssi,
+                             ptr->hops,
+                             (long long)now);
                     if (strlen(batch) + strlen(lp) < sizeof(batch) - 100) {
                         strcat(batch, lp);
                         batch_count++;

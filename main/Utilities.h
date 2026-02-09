@@ -17,7 +17,9 @@ static bool mac_equal(const uint8_t a[6], const uint8_t b[6]) {
 
 static bool mac_is_zero(const uint8_t mac[6]) {
     for (int i = 0; i < 6; i++) {
-        if (mac[i]) return false;
+        if (mac[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -27,20 +29,26 @@ static int64_t now_us(void) {
 }
 
 static esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel) {
-    if (esp_now_is_peer_exist(mac)) return ESP_OK;
+    if (esp_now_is_peer_exist(mac)) {
+        return ESP_OK;
+    }
     esp_now_peer_info_t p = {0};
     memcpy(p.peer_addr, mac, 6);
     p.channel = channel;
     p.ifidx = ESP_IF_WIFI_STA;
     p.encrypt = false;
     esp_err_t r = esp_now_add_peer(&p);
-    if (r != ESP_OK) ESP_LOGE(TAG, "add_peer %s", esp_err_to_name(r));
+    if (r != ESP_OK) {
+        ESP_LOGE(TAG, "add_peer %s", esp_err_to_name(r));
+    }
     return r;
 }
 
 static esp_err_t setup_broadcast_peer(uint8_t channel) {
     uint8_t b[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    if (esp_now_is_peer_exist(b)) esp_now_del_peer(b);
+    if (esp_now_is_peer_exist(b)) {
+        esp_now_del_peer(b);
+    }
     esp_now_peer_info_t p = {0};
     memcpy(p.peer_addr, b, 6);
     p.channel = channel;
