@@ -52,4 +52,4 @@ static void init_led_strip(void) {
     set_led(0,0,0);
 }
 
-#endif // LED_CONTROL_H
+#endif 

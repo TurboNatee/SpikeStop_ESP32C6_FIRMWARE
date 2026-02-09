@@ -5,7 +5,7 @@
 #include "freertos/queue.h"
 #include "esp_timer.h"
 
-// Forward declarations
+
 void send_sample_data_packet(void);
 int64_t now_us(void);
 
@@ -64,4 +64,4 @@ static void init_button(void) {
     xTaskCreate(button_task, "button_task", 4096, NULL, 10, NULL);
 }
 
-#endif // BUTTON_HANDLER_H
+#endif 

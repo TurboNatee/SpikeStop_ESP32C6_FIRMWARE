@@ -6,7 +6,7 @@
 #include "time.h"
 #include "sys/time.h"
 
-// Forward declarations
+
 void send_data_packet(void);
 float turbidity_read_voltage(void);
 int turbidity_get_status(float v);
@@ -80,4 +80,4 @@ void process_auto_send(void) {
     }
 }
 
-#endif // INITIALIZATION_H
+#endif 

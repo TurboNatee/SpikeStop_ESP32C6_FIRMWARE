@@ -66,4 +66,4 @@ static void restart_node(const char *reason) {
     esp_restart();
 }
 
-#endif // UTILITIES_H
+#endif

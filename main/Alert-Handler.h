@@ -7,7 +7,7 @@
 #include "stdlib.h"
 #include "esp_timer.h"
 
-// Forward declarations (requires Data-Packets.h to be included first for alert_notify_pkt_t)
+
 esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel);
 bool reliable_send(const uint8_t *mac, const void *data, size_t len, int retries);
 void set_led(uint8_t r, uint8_t g, uint8_t b);
@@ -159,4 +159,4 @@ static esp_err_t poll_alerts_from_influxdb(void) {
     return ESP_OK;
 }
 
-#endif // ALERT_HANDLER_H
+#endif 

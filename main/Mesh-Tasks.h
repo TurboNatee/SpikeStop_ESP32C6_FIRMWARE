@@ -8,7 +8,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 
-// Forward declarations
+
 void init_data_timer(void);
 void init_alert_timer(void);
 void initialize_sntp(void);
@@ -36,7 +36,7 @@ extern volatile bool parent_link_up;
 extern int8_t best_beacon_rssi;
 extern QueueHandle_t influxdb_queue;
 
-// ========= Root Beacon Task =========
+
 void root_beacon_task(void *arg) {
     uint8_t bmac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     setup_broadcast_peer(current_channel);
@@ -61,7 +61,7 @@ void root_beacon_task(void *arg) {
     }
 }
 
-// ========= Child Task =========
+
 void child_task(void *arg) {
     setup_broadcast_peer(current_channel);
     int scan_attempts = 0;
@@ -133,4 +133,4 @@ void child_task(void *arg) {
     }
 }
 
-#endif // MESH_TASKS_H
+#endif 

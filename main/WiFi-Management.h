@@ -135,4 +135,4 @@ static esp_err_t wifi_init_sta_or_child(bool *joined_router, uint8_t *out_channe
     return ESP_OK;
 }
 
-#endif // WIFI_MANAGEMENT_H
+#endif 

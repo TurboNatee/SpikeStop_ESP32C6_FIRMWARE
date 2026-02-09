@@ -185,4 +185,4 @@ void queue_influxdb_data(const char *node_mac, int sensor_value, int temperature
     }
 }
 
-#endif // INFLUXDB_HANDLER_H
+#endif 
