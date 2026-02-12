@@ -4,8 +4,8 @@ static const char *TAG = "MESH_HYBRID";
 
 #include "User-Board-Config.h"
 
-#define ALERT_POLL_INTERVAL_MS 10000
-#define DATA_SEND_INTERVAL_MS    5000
+#define ALERT_POLL_INTERVAL_MS 5000
+#define DATA_SEND_INTERVAL_MS    2000
 #define BUTTON_DEBOUNCE_MS       50
 #define BUTTON_LONG_PRESS_MS     2000
 
@@ -104,6 +104,11 @@ static void update_turbidity_presence(void) {
     turbidity_sensor_present = present;
     if (!present) {
         ESP_LOGW(TAG, "No turbidity sensor detected - continuing");
+    }
+    else { 
+        char mac_str[18];
+        mac_to_str(my_mac, mac_str, sizeof(mac_str));
+        ESP_LOGI(TAG, "Turbidity sensor detected on %s", mac_str);
     }
 }
 

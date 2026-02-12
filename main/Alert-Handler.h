@@ -44,7 +44,7 @@ static bool parse_mac_string(const char *mac_str, uint8_t *mac_bytes) {
 void send_alert_notification(const uint8_t target_mac[6], float delta) {
     alert_notify_pkt_t pkt = {0};
     pkt.hdr.type = PKT_ALERT_NOTIFY;
-    pkt.hdr.max_hops = 8;
+    pkt.hdr.max_hops = 4;
     pkt.hdr.hop_count = 0;
     memcpy(pkt.target_mac, target_mac, 6);
     pkt.delta = delta;
@@ -52,7 +52,7 @@ void send_alert_notification(const uint8_t target_mac[6], float delta) {
     ensure_peer(target_mac, current_channel);
     if (reliable_send(target_mac, &pkt, sizeof(pkt), SEND_RETRY_LIMIT)) {
         set_led(255, 0, 255);
-        vTaskDelay(pdMS_TO_TICKS(150));
+        vTaskDelay(pdMS_TO_TICKS(100));
         led_root();
     }
 }
