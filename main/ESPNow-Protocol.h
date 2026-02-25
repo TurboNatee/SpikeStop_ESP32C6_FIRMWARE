@@ -3,7 +3,24 @@
 
 #include "esp_now.h"
 #include "esp_wifi.h"
+#include <string.h>
+#include <stdlib.h>
+#include <math.h>
 
+#define ALERT_DELTA_THRESHOLD 50.0f
+#define ALERT_WINDOW_SIZE 10
+
+typedef struct {
+    uint8_t mac[6];
+    int values[ALERT_WINDOW_SIZE];
+    int count;
+    bool in_alert;
+} node_alert_state_t;
+
+static node_alert_state_t alert_states[10] = {0};
+static int alert_state_count = 0;
+
+void send_alert_notification(const uint8_t target_mac[6], float delta);
 bool mac_equal(const uint8_t a[6], const uint8_t b[6]);
 bool mac_is_zero(const uint8_t mac[6]);
 void blink_orange(int times);
@@ -122,6 +139,54 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
                 int sensor_value = 0, temperature = 0;
                 if (sscanf((char*)dp->payload, "Node:%*s SENSOR:%d TEMP:%dC", &sensor_value, &temperature) == 2) {
                     queue_influxdb_data(src, sensor_value, temperature, dp->hdr.rssi, dp->hdr.hop_count);
+
+                    node_alert_state_t *state = NULL;
+                    for (int i = 0; i < alert_state_count; i++) {
+                        if (mac_equal(alert_states[i].mac, dp->src_mac)) {
+                            state = &alert_states[i];
+                            break;
+                        }
+                    }
+
+                    if (!state && alert_state_count < 10) {
+                        state = &alert_states[alert_state_count++];
+                        memcpy(state->mac, dp->src_mac, 6);
+                        state->count = 0;
+                        state->in_alert = false;
+                    }
+
+                    if (state) {
+                        if (state->count < ALERT_WINDOW_SIZE) {
+                            state->values[state->count++] = sensor_value;
+                        } else {
+                            memmove(state->values,
+                                    state->values + 1,
+                                    sizeof(int) * (ALERT_WINDOW_SIZE - 1));
+                            state->values[ALERT_WINDOW_SIZE - 1] = sensor_value;
+                        }
+
+                        float sum = 0.0f;
+                        for (int i = 0; i < state->count; i++) {
+                            sum += (float)state->values[i];
+                        }
+                        float avg = (state->count > 0) ? (sum / (float)state->count) : 0.0f;
+                        float max_delta = 0.0f;
+                        for (int i = 0; i < state->count; i++) {
+                            float d = fabsf((float)state->values[i] - avg);
+                            if (d > max_delta) {
+                                max_delta = d;
+                            }
+                        }
+
+                        if (max_delta > ALERT_DELTA_THRESHOLD && !state->in_alert) {
+                            state->in_alert = true;
+                            send_alert_notification(dp->src_mac, max_delta);
+                            ESP_LOGI(TAG, "Alert: %s delta %.2f > %.2f", src, max_delta, ALERT_DELTA_THRESHOLD);
+                        } else if (state->in_alert && max_delta <= ALERT_DELTA_THRESHOLD) {
+                            state->in_alert = false;
+                            ESP_LOGI(TAG, "Cleared: %s delta %.2f <= %.2f", src, max_delta, ALERT_DELTA_THRESHOLD);
+                        }
+                    }
                 }
                 blink_orange(3);
             } else if (parent_link_up && dp->hdr.hop_count < dp->hdr.max_hops) {

@@ -160,6 +160,8 @@ void app_main(void) {
 
     init_espnow();
 
+    xTaskCreate(alert_led_task, "alert_led", 2048, NULL, 4, NULL);
+
     if (joined) {
         start_root_mode(ap_ch);
     } else {

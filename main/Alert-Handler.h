@@ -3,10 +3,15 @@
 
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_log.h"
 #include "string.h"
 #include "stdlib.h"
 #include "esp_timer.h"
 
+extern uint8_t my_mac[6];
+
+void alert_led_effect(void);
+bool mac_equal(const uint8_t a[6], const uint8_t b[6]);
 esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel);
 bool reliable_send(const uint8_t *mac, const void *data, size_t len, int retries);
 void set_led(uint8_t r, uint8_t g, uint8_t b);
@@ -99,7 +104,13 @@ static void process_alert_response(const char *response, int length) {
                     }
                 }
                 if (!seen) {
-                    send_alert_notification(target, 150.0f);
+                    if (mac_equal(target, my_mac)) {
+                        alert_led_effect();
+                        ESP_LOGI(TAG, "Alert for self detected");
+                        send_alert_notification(target, 150.0f);
+                    } else {
+                        send_alert_notification(target, 150.0f);
+                    }
                     alerts_sent++;
                     if (alerted_count < 5) {
                         memcpy(alerted_nodes[alerted_count], target, 6);

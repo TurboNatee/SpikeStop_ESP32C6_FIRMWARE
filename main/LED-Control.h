@@ -6,6 +6,7 @@
 #include "led_strip.h"
 
 static led_strip_handle_t led_strip;
+static bool alert_active = false;
 
 static void set_led(uint8_t r, uint8_t g, uint8_t b) {
     led_strip_clear(led_strip);
@@ -47,28 +48,21 @@ static void blink_orange(int times) {
     }
 }
 
-static void alert_led_effect(void) {
-    if (role == ROLE_ROOT) {
-        for (int i = 0; i < 10; i++) {
-            set_led(255, 0, 0);
-            vTaskDelay(pdMS_TO_TICKS(100));
-            set_led(0, 0, 255);
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-        led_root();
-    } else if (role == ROLE_CHILD) {
-        for (int i = 0; i < 5; i++) {
+void alert_led_task(void *pvParameters) {
+    while (1) {
+        if (alert_active) {
             set_led(255, 0, 0);
             vTaskDelay(pdMS_TO_TICKS(300));
-            set_led(0, 255, 0);
+            set_led(0, 0, 0);
             vTaskDelay(pdMS_TO_TICKS(300));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
-        led_child();
-    } else {
-        set_led(255, 0, 0);
-        vTaskDelay(pdMS_TO_TICKS(1500));
-        led_isolated();
     }
+}
+
+void alert_led_effect(void) {
+    alert_active = true;
 }
 
 static void init_led_strip(void) {
