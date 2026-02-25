@@ -60,17 +60,17 @@ static esp_err_t setup_broadcast_peer(uint8_t channel) {
 static bool reliable_send(const uint8_t *mac, const void *data, size_t len, int retries) {
     for (int i = 0; i < retries; i++) {
         if (esp_now_send(mac, (uint8_t*)data, len) == ESP_OK) {
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(10));
             return true;
         }
-        vTaskDelay(pdMS_TO_TICKS(60 * (i + 1)));
+        vTaskDelay(pdMS_TO_TICKS(40 * (i + 1)));
     }
     return false;
 }
 
 static void restart_node(const char *reason) {
     ESP_LOGE(TAG, "Restarting: %s", reason ? reason : "no-reason");
-    vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(50));
     esp_restart();
 }
 
