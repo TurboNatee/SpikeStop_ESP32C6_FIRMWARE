@@ -10,6 +10,7 @@ void root_beacon_task(void *arg);
 void init_data_timer(void);
 void init_alert_timer(void);
 void initialize_sntp(void);
+void init_espnow(void);
 extern bool data_timer_running;
 extern bool alert_timer_running;
 
@@ -67,6 +68,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
             current_layer = 0;
             led_root();
 
+            init_espnow();
             xTaskCreate(root_beacon_task, "root_beacon", 4096, NULL, 5, NULL);
             if (!data_timer_running) init_data_timer();
             if (!alert_timer_running) init_alert_timer();
@@ -103,9 +105,16 @@ static esp_err_t wifi_init_sta_or_child(bool *joined_router, uint8_t *out_channe
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
 
+    char ssid[33] = {0};
+    char pass[65] = {0};
+    if (!provisioning_get_wifi_credentials(ssid, sizeof(ssid), pass, sizeof(pass))) {
+        ESP_LOGW(TAG, "No Wi-Fi credentials available; starting as child scanner");
+        return ESP_OK;
+    }
+
     wifi_config_t sta = {0};
-    strncpy((char*)sta.sta.ssid, ROUTER_SSID, sizeof(sta.sta.ssid));
-    strncpy((char*)sta.sta.password, ROUTER_PASS, sizeof(sta.sta.password));
+    strncpy((char*)sta.sta.ssid, ssid, sizeof(sta.sta.ssid) - 1);
+    strncpy((char*)sta.sta.password, pass, sizeof(sta.sta.password) - 1);
     sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     sta.sta.pmf_cfg.capable = false;
     sta.sta.pmf_cfg.required = false;

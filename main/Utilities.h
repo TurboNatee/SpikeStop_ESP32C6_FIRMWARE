@@ -29,13 +29,21 @@ static int64_t now_us(void) {
 }
 
 static esp_err_t ensure_peer(const uint8_t mac[6], uint8_t channel) {
+    uint8_t target_channel = channel == 0 ? 0 : channel;
     if (esp_now_is_peer_exist(mac)) {
-        return ESP_OK;
+        esp_now_peer_info_t existing = {0};
+        if (esp_now_get_peer(mac, &existing) == ESP_OK) {
+            if (existing.channel == target_channel && existing.ifidx == WIFI_IF_STA) {
+                return ESP_OK;
+            }
+        }
+        esp_now_del_peer(mac);
     }
+
     esp_now_peer_info_t p = {0};
     memcpy(p.peer_addr, mac, 6);
-    p.channel = channel;
-    p.ifidx = ESP_IF_WIFI_STA;
+    p.channel = target_channel;
+    p.ifidx = WIFI_IF_STA;
     p.encrypt = false;
     esp_err_t r = esp_now_add_peer(&p);
     if (r != ESP_OK) {
@@ -51,8 +59,8 @@ static esp_err_t setup_broadcast_peer(uint8_t channel) {
     }
     esp_now_peer_info_t p = {0};
     memcpy(p.peer_addr, b, 6);
-    p.channel = channel;
-    p.ifidx = ESP_IF_WIFI_STA;
+    p.channel = (channel == 0 ? 0 : channel);
+    p.ifidx = WIFI_IF_STA;
     p.encrypt = false;
     return esp_now_add_peer(&p);
 }

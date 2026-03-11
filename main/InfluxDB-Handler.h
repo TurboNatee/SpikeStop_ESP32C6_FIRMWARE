@@ -12,6 +12,10 @@ typedef struct {
     char node_mac[18];
     int sensor_value;
     int temperature;
+    int battery_cv;
+    int battery_pct;
+    int ir_signal_mv;
+    int ir_broken;
     int8_t rssi;
     int hops;
     uint64_t timestamp;
@@ -96,7 +100,7 @@ static void influxdb_task(void *arg) {
         if (xQueueReceive(influxdb_queue, &ptr, pdMS_TO_TICKS(5000)) == pdTRUE) {
             batch[0] = '\0';
             batch_count = 0;
-            char lp[256];
+            char lp[384];
             char dash[18];
             int j = 0;
 
@@ -111,11 +115,15 @@ static void influxdb_task(void *arg) {
             }
             snprintf(lp,
                      sizeof(lp),
-                     "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
+                     "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
                      INFLUXDB_MEASUREMENT,
                      dash,
                      ptr->temperature,
                      ptr->sensor_value,
+                     (float)ptr->battery_cv / 100.0f,
+                     ptr->battery_pct,
+                     ptr->ir_signal_mv,
+                     ptr->ir_broken,
                      ptr->rssi,
                      ptr->hops,
                      (long long)now);
@@ -136,11 +144,15 @@ static void influxdb_task(void *arg) {
                     }
                     snprintf(lp,
                              sizeof(lp),
-                             "%s,node=%s temperature=%d,sensor_value=%d,rssi=%d,hops=%d %lld\n",
+                             "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
                              INFLUXDB_MEASUREMENT,
                              dash,
                              ptr->temperature,
                              ptr->sensor_value,
+                             (float)ptr->battery_cv / 100.0f,
+                             ptr->battery_pct,
+                             ptr->ir_signal_mv,
+                             ptr->ir_broken,
                              ptr->rssi,
                              ptr->hops,
                              (long long)now);
@@ -179,7 +191,15 @@ static void influxdb_task(void *arg) {
     }
 }
 
-void queue_influxdb_data(const char *node_mac, int sensor_value, int temperature, int8_t rssi, int hops) {
+void queue_influxdb_data(const char *node_mac,
+                        int sensor_value,
+                        int temperature,
+                        int battery_cv,
+                        int battery_pct,
+                        int ir_signal_mv,
+                        int ir_broken,
+                        int8_t rssi,
+                        int hops) {
     if (!influxdb_queue || !pool_mutex) {
         ESP_LOGW(TAG, "Queue not ready");
         return;
@@ -191,6 +211,10 @@ void queue_influxdb_data(const char *node_mac, int sensor_value, int temperature
 
     d->sensor_value = sensor_value;
     d->temperature = temperature;
+    d->battery_cv = battery_cv;
+    d->battery_pct = battery_pct;
+    d->ir_signal_mv = ir_signal_mv;
+    d->ir_broken = ir_broken;
     d->rssi = rssi;
     d->hops = hops;
     strncpy(d->node_mac, node_mac, sizeof(d->node_mac) - 1);

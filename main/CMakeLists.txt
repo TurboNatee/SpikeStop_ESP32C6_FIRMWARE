@@ -3,6 +3,8 @@ idf_component_register(
     INCLUDE_DIRS "."
     PRIV_REQUIRES
     esp_wifi
+    wifi_provisioning
+    bt
     esp_netif
     nvs_flash
     lwip

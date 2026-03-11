@@ -8,8 +8,12 @@ static const char *TAG = "MESH_HYBRID";
 #define DATA_SEND_INTERVAL_MS    2000
 #define BUTTON_DEBOUNCE_MS       50
 #define BUTTON_LONG_PRESS_MS     2000
+#define BUTTON_FACTORY_RESET_MS  5000
 
 typedef enum { ROLE_ISOLATED = 0, ROLE_ROOT = 1, ROLE_CHILD = 2 } node_role_t;
+
+#include "Provisioning.h"
+#include "BLE-Provisioning.h"
 
 node_role_t role = ROLE_ISOLATED;
 uint8_t my_mac[6] = {0};
@@ -21,18 +25,31 @@ volatile int64_t last_parent_seen_us = 0;
 volatile bool parent_link_up = false;
 int8_t best_beacon_rssi = -127;
 
+provisioning_config_t provision_cfg = {0};
+bool is_provisioned = false;
+volatile bool provision_share_mode_active = false;
+volatile int64_t provision_share_until_us = 0;
+uint32_t provision_offer_nonce = 0;
+uint32_t provision_last_counter = 0;
+
 EventGroupHandle_t app_events;
 const int EVT_WIFI_OK = BIT0;
 const int EVT_AUTO_SEND = BIT2;
 const int EVT_POLL_ALERTS = BIT3;
+const int EVT_FAST_ALERT = BIT4;
 
 esp_timer_handle_t data_timer_handle;
 esp_timer_handle_t alert_timer_handle;
+esp_timer_handle_t fast_alert_timer_handle;
 bool data_timer_running = false;
 bool alert_timer_running = false;
+bool fast_alert_timer_running = false;
 
 #include "LED-Control.h"
 #include "Turbidity-Sensor.h"
+#include "Temperature-Sensor.h"
+#include "IR-Sensor.h"
+#include "Battery-Voltage.h"
 #include "Utilities.h"
 #include "Data-Packets.h"
 #include "InfluxDB-Handler.h"
@@ -53,6 +70,12 @@ static void alert_timer_callback(void *arg) {
     }
 }
 
+static void fast_alert_timer_callback(void *arg) {
+    if (role == ROLE_ROOT) {
+        xEventGroupSetBits(app_events, EVT_FAST_ALERT);
+    }
+}
+
 void init_data_timer(void) {
     esp_timer_create_args_t args = {
         .callback = &data_timer_callback,
@@ -62,6 +85,17 @@ void init_data_timer(void) {
     ESP_ERROR_CHECK(esp_timer_create(&args, &data_timer_handle));
     ESP_ERROR_CHECK(esp_timer_start_periodic(data_timer_handle, DATA_SEND_INTERVAL_MS * 1000));
     data_timer_running = true;
+}
+
+void init_fast_alert_timer(void) {
+    esp_timer_create_args_t args = {
+        .callback = &fast_alert_timer_callback,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "fast_alert_timer"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&args, &fast_alert_timer_handle));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(fast_alert_timer_handle, ALERT_EVAL_INTERVAL_MS * 1000));
+    fast_alert_timer_running = true;
 }
 
 void init_alert_timer(void) {
@@ -81,6 +115,14 @@ static void init_storage(void) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
+
+    esp_err_t p = provisioning_load_from_nvs();
+    if (p == ESP_OK && is_provisioned) {
+        ESP_LOGI(TAG, "Provisioning loaded for venue '%s'", provision_cfg.venue_id);
+    } else {
+        ESP_LOGW(TAG, "No runtime provisioning found in NVS (using fallback creds if set)");
+    }
+    provisioning_load_counter_from_nvs();
 }
 
 static void init_synchronization(void) {
@@ -94,6 +136,9 @@ static void init_peripherals(void) {
     init_led_strip();
     init_button();
     turbidity_init();
+    temperature_sensor_init();
+    ir_sensor_init();
+    battery_voltage_init();
 }
 
 static void update_turbidity_presence(void) {
@@ -119,14 +164,18 @@ static void init_identity(void) {
     ESP_LOGI(TAG, "MAC %s", my);
 }
 
-static void init_espnow(void) {
-    ESP_ERROR_CHECK(esp_now_init());
+void init_espnow(void) {
+    esp_err_t err = esp_now_init();
+    if (err != ESP_OK && err != ESP_ERR_ESPNOW_EXIST) {
+        ESP_ERROR_CHECK(err);
+    }
     ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)ESPNOW_PMK));
     ESP_ERROR_CHECK(esp_now_register_send_cb((esp_now_send_cb_t)espnow_send_cb));
     ESP_ERROR_CHECK(esp_now_register_recv_cb((esp_now_recv_cb_t)espnow_recv_cb));
 }
 
 static void start_root_mode(uint8_t ap_ch) {
+    init_espnow();
     role = ROLE_ROOT;
     memcpy(root_mac, my_mac, 6);
     current_channel = ap_ch;
@@ -153,6 +202,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Booting mesh hybrid (clean restart-on-loss)");
 
     init_peripherals();
+    provisioning_start_housekeeping_task();
     update_turbidity_presence();
     init_synchronization();
     init_storage();
@@ -171,20 +221,27 @@ void app_main(void) {
         start_root_mode(ap_ch);
     } else {
         start_child_mode();
+        if (!is_provisioned) {
+            ble_provisioning_start_if_needed();
+        }
     }
 
     init_data_timer();
+    init_fast_alert_timer();
 
     while (1) {
         EventBits_t bits = xEventGroupWaitBits(
             app_events,
-            EVT_AUTO_SEND | EVT_POLL_ALERTS,
+            EVT_AUTO_SEND | EVT_POLL_ALERTS | EVT_FAST_ALERT,
             pdTRUE,
             pdFALSE,
             portMAX_DELAY
         );
         if (bits & EVT_AUTO_SEND) {
             process_auto_send();
+        }
+        if (bits & EVT_FAST_ALERT) {
+            process_fast_alert_check();
         }
         if ((bits & EVT_POLL_ALERTS) && role == ROLE_ROOT) {
             poll_alerts_from_influxdb();

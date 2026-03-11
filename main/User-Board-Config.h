@@ -4,3 +4,35 @@
 #define SEND_RETRY_LIMIT         2
 #define LED_PIN                  8
 #define BOOT_BUTTON_PIN          9
+#define TURBIDITY_SENSOR_GPIO    0
+#define TEMP_SENSOR_GPIO         1
+#define IR_PHOTODIODE_GPIO       2
+#define IR_EMITTER_GPIO          3
+#define IR_SAMPLE_INTERVAL_MS    500
+#define IR_BREAK_THRESHOLD_MV    12
+#define ALERT_EVAL_INTERVAL_MS   1500
+#define ALERT_LED_GPIO           4
+#define ALERT_LED_ACTIVE_LEVEL   1
+#define BATTERY_ADC_GPIO         5
+#define BATTERY_DIVIDER_RATIO    2.0f
+
+#define SPIKE_TURBIDITY_DELTA_CV       100
+#define SPIKE_TURBIDITY_MAJOR_DELTA_CV 100
+#define SPIKE_TURBIDITY_INSTANT_DELTA_CV 100
+#define SPIKE_TURBIDITY_CLEAR_CV       12
+#define SPIKE_TEMP_DELTA_C             4
+#define SPIKE_TEMP_INSTANT_DELTA_C     4
+#define SPIKE_TEMP_CLEAR_C             1
+#define SPIKE_IR_DELTA_MV              12
+#define SPIKE_IR_INSTANT_DELTA_MV      20
+#define SPIKE_IR_CLEAR_MV              5
+#define SPIKE_TRIGGER_CONFIRM_SAMPLES  3
+#define SPIKE_CLEAR_CONFIRM_SAMPLES    3
+
+#define REMOTE_RESET_CODE              991337
+#define REMOTE_RESET_COOLDOWN_MS       60000
+#define REMOTE_RESET_QUERY_WINDOW_S    30
+
+#define REMOTE_SHARE_CODE              991338
+#define REMOTE_SHARE_COOLDOWN_MS       10000
+#define REMOTE_SHARE_QUERY_WINDOW_S    30

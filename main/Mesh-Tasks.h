@@ -11,6 +11,7 @@
 void init_data_timer(void);
 void init_alert_timer(void);
 void initialize_sntp(void);
+void init_espnow(void);
 esp_err_t setup_broadcast_peer(uint8_t channel);
 void led_root(void);
 void led_isolated(void);
@@ -34,6 +35,10 @@ extern volatile int64_t last_parent_seen_us;
 extern volatile bool parent_link_up;
 extern int8_t best_beacon_rssi;
 extern QueueHandle_t influxdb_queue;
+extern bool is_provisioned;
+extern volatile bool provision_share_mode_active;
+extern volatile int64_t provision_share_until_us;
+extern uint32_t provision_offer_nonce;
 
 void root_beacon_task(void *arg) {
     uint8_t bmac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -55,6 +60,17 @@ void root_beacon_task(void *arg) {
         b.channel = current_channel;
         b.layer = 0;
         esp_now_send(bmac, (uint8_t*)&b, sizeof(b));
+
+        if (provision_share_mode_active && is_provisioned && now_us() < provision_share_until_us) {
+            prov_offer_pkt_t po = {0};
+            po.hdr.type = PKT_PROV_OFFER;
+            po.hdr.max_hops = 1;
+            memcpy(po.root_mac, my_mac, 6);
+            po.nonce = provision_offer_nonce;
+            po.ttl_ms = (uint32_t)((provision_share_until_us - now_us()) / 1000LL);
+            strlcpy(po.product_tag, PROV_PRODUCT_TAG, sizeof(po.product_tag));
+            esp_now_send(bmac, (uint8_t*)&po, sizeof(po));
+        }
         vTaskDelay(pdMS_TO_TICKS(BEACON_INTERVAL_MS));
     }
 }
@@ -101,6 +117,7 @@ void child_task(void *arg) {
                     }
                     led_root();
 
+                    init_espnow();
                     xTaskCreate(root_beacon_task, "root_beacon", 4096, NULL, 5, NULL);
                     if (!data_timer_running) init_data_timer();
                     if (!alert_timer_running) init_alert_timer();
