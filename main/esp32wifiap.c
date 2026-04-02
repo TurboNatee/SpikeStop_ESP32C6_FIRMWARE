@@ -44,6 +44,7 @@ esp_timer_handle_t fast_alert_timer_handle;
 bool data_timer_running = false;
 bool alert_timer_running = false;
 bool fast_alert_timer_running = false;
+static volatile bool alert_poll_in_progress = false;
 
 #include "LED-Control.h"
 #include "Turbidity-Sensor.h"
@@ -71,9 +72,14 @@ static void alert_timer_callback(void *arg) {
 }
 
 static void fast_alert_timer_callback(void *arg) {
-    if (role == ROLE_ROOT) {
-        xEventGroupSetBits(app_events, EVT_FAST_ALERT);
-    }
+    xEventGroupSetBits(app_events, EVT_FAST_ALERT);
+}
+
+static void alert_poll_task(void *arg) {
+    (void)arg;
+    poll_alerts_from_influxdb();
+    alert_poll_in_progress = false;
+    vTaskDelete(NULL);
 }
 
 void init_data_timer(void) {
@@ -244,7 +250,13 @@ void app_main(void) {
             process_fast_alert_check();
         }
         if ((bits & EVT_POLL_ALERTS) && role == ROLE_ROOT) {
-            poll_alerts_from_influxdb();
+            if (!alert_poll_in_progress) {
+                alert_poll_in_progress = true;
+                if (xTaskCreate(alert_poll_task, "alert_poll", 8192, NULL, 3, NULL) != pdPASS) {
+                    alert_poll_in_progress = false;
+                    ESP_LOGE(TAG, "Failed to start alert poll task");
+                }
+            }
         }
     }
 }

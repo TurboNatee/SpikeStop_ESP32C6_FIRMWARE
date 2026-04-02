@@ -11,6 +11,7 @@ void queue_influxdb_data(const char *node_mac,
                         int battery_cv,
                         int battery_pct,
                         int ir_signal_mv,
+                        int ir_signal_uv,
                         int ir_broken,
                         int8_t rssi,
                         int hops);
@@ -26,6 +27,7 @@ int turbidity_get_status(float v);
 float battery_read_voltage(void);
 int battery_estimate_percent(float vbat);
 bool ir_get_last_signal_mv(int *mv_out);
+bool ir_get_last_signal_uv(int32_t *uv_out);
 bool ir_get_last_broken(bool *broken_out);
 void mac_to_str(const uint8_t m[6], char *out, size_t n);
 extern bool turbidity_sensor_present;
@@ -168,8 +170,10 @@ void send_data_packet(void) {
     }
 
     int ir_signal_mv = 0;
+    int32_t ir_signal_uv = 0;
     bool ir_broken = true;
     int ir_signal_to_send = ir_get_last_signal_mv(&ir_signal_mv) ? ir_signal_mv : -999;
+    int ir_signal_uv_to_send = ir_get_last_signal_uv(&ir_signal_uv) ? (int)ir_signal_uv : -999000;
     int ir_broken_to_send = ir_get_last_broken(&ir_broken) ? (ir_broken ? 1 : 0) : -1;
     int battery_cv = !isnan(vbat) ? (int)lroundf(vbat * 100.0f) : -1;
     int battery_pct_to_send = !isnan(vbat) ? battery_pct : -1;
@@ -180,7 +184,7 @@ void send_data_packet(void) {
     memcpy(d.src_mac, my_mac, 6);
     snprintf((char *)d.payload,
              sizeof(d.payload),
-             "N:%02x%02x S:%d T:%d V:%d P:%d I:%d B:%d",
+             "N:%02x%02x S:%d T:%d V:%d P:%d I:%d U:%d B:%d",
              my_mac[4],
              my_mac[5],
              sensor_value,
@@ -188,6 +192,7 @@ void send_data_packet(void) {
              battery_cv,
              battery_pct_to_send,
              ir_signal_to_send,
+             ir_signal_uv_to_send,
              ir_broken_to_send);
 
     ensure_peer(parent_mac, current_channel);

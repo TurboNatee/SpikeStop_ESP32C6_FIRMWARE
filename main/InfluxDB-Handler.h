@@ -15,17 +15,65 @@ typedef struct {
     int battery_cv;
     int battery_pct;
     int ir_signal_mv;
+    int ir_signal_uv;
     int ir_broken;
     int8_t rssi;
     int hops;
     uint64_t timestamp;
 } influxdb_data_t;
 
+typedef struct {
+    char node_mac[18];
+    bool have_baseline;
+    int baseline_sensor_value;
+    int baseline_temperature;
+    int pending_trigger_count;
+} influx_filter_state_t;
+
 #define DATA_POOL_SIZE 50
 static influxdb_data_t data_pool[DATA_POOL_SIZE];
 static int pool_write_idx = 0;
 static SemaphoreHandle_t pool_mutex;
 static QueueHandle_t influxdb_queue = NULL;
+
+#ifndef SPIKE_TURBIDITY_INSTANT_DELTA_CV
+#define SPIKE_TURBIDITY_INSTANT_DELTA_CV 40
+#endif
+
+#ifndef SPIKE_TEMP_INSTANT_DELTA_C
+#define SPIKE_TEMP_INSTANT_DELTA_C 4
+#endif
+
+#define INFLUX_FILTER_NODE_MAX 24
+static influx_filter_state_t influx_filter_states[INFLUX_FILTER_NODE_MAX] = {0};
+
+static influx_filter_state_t *get_influx_filter_state(const char *node_mac) {
+    if (!node_mac || !node_mac[0]) {
+        return NULL;
+    }
+
+    influx_filter_state_t *empty = NULL;
+    for (int i = 0; i < INFLUX_FILTER_NODE_MAX; i++) {
+        if (influx_filter_states[i].node_mac[0] == '\0') {
+            if (!empty) {
+                empty = &influx_filter_states[i];
+            }
+            continue;
+        }
+        if (strncmp(influx_filter_states[i].node_mac, node_mac, sizeof(influx_filter_states[i].node_mac)) == 0) {
+            return &influx_filter_states[i];
+        }
+    }
+
+    if (empty) {
+        strlcpy(empty->node_mac, node_mac, sizeof(empty->node_mac));
+        empty->have_baseline = false;
+        empty->pending_trigger_count = 0;
+        return empty;
+    }
+
+    return &influx_filter_states[0];
+}
 
 static esp_err_t send_batch_to_influxdb(const char *batch_data) {
     wifi_ap_record_t ap;
@@ -115,7 +163,7 @@ static void influxdb_task(void *arg) {
             }
             snprintf(lp,
                      sizeof(lp),
-                     "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
+                     "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_signal_uv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
                      INFLUXDB_MEASUREMENT,
                      dash,
                      ptr->temperature,
@@ -123,6 +171,7 @@ static void influxdb_task(void *arg) {
                      (float)ptr->battery_cv / 100.0f,
                      ptr->battery_pct,
                      ptr->ir_signal_mv,
+                     ptr->ir_signal_uv,
                      ptr->ir_broken,
                      ptr->rssi,
                      ptr->hops,
@@ -144,7 +193,7 @@ static void influxdb_task(void *arg) {
                     }
                     snprintf(lp,
                              sizeof(lp),
-                             "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
+                             "%s,node=%s temperature=%d,sensor_value=%d,battery_v=%.2f,battery_pct=%d,ir_signal_mv=%d,ir_signal_uv=%d,ir_broken=%d,rssi=%d,hops=%d %lld\n",
                              INFLUXDB_MEASUREMENT,
                              dash,
                              ptr->temperature,
@@ -152,6 +201,7 @@ static void influxdb_task(void *arg) {
                              (float)ptr->battery_cv / 100.0f,
                              ptr->battery_pct,
                              ptr->ir_signal_mv,
+                             ptr->ir_signal_uv,
                              ptr->ir_broken,
                              ptr->rssi,
                              ptr->hops,
@@ -197,6 +247,7 @@ void queue_influxdb_data(const char *node_mac,
                         int battery_cv,
                         int battery_pct,
                         int ir_signal_mv,
+                        int ir_signal_uv,
                         int ir_broken,
                         int8_t rssi,
                         int hops) {
@@ -204,6 +255,40 @@ void queue_influxdb_data(const char *node_mac,
         ESP_LOGW(TAG, "Queue not ready");
         return;
     }
+
+    influx_filter_state_t *filter = get_influx_filter_state(node_mac);
+    if (filter) {
+        if (!filter->have_baseline) {
+            filter->baseline_sensor_value = sensor_value;
+            filter->baseline_temperature = temperature;
+            filter->pending_trigger_count = 0;
+            filter->have_baseline = true;
+        } else {
+            int turb_delta = abs(sensor_value - filter->baseline_sensor_value);
+            int temp_delta = abs(temperature - filter->baseline_temperature);
+            bool trigger_now = (turb_delta >= SPIKE_TURBIDITY_INSTANT_DELTA_CV) ||
+                               (temp_delta >= SPIKE_TEMP_INSTANT_DELTA_C);
+
+            if (trigger_now) {
+                filter->pending_trigger_count++;
+                if (filter->pending_trigger_count < 2) {
+                    ESP_LOGW(TAG,
+                             "Suppress one-sample spike for %s: dTurb=%d dTemp=%d",
+                             node_mac,
+                             turb_delta,
+                             temp_delta);
+                    return;
+                }
+                filter->pending_trigger_count = 0;
+            } else {
+                filter->pending_trigger_count = 0;
+            }
+
+            filter->baseline_sensor_value = sensor_value;
+            filter->baseline_temperature = temperature;
+        }
+    }
+
     xSemaphoreTake(pool_mutex, portMAX_DELAY);
     influxdb_data_t *d = &data_pool[pool_write_idx];
     pool_write_idx = (pool_write_idx + 1) % DATA_POOL_SIZE;
@@ -214,6 +299,7 @@ void queue_influxdb_data(const char *node_mac,
     d->battery_cv = battery_cv;
     d->battery_pct = battery_pct;
     d->ir_signal_mv = ir_signal_mv;
+    d->ir_signal_uv = ir_signal_uv;
     d->ir_broken = ir_broken;
     d->rssi = rssi;
     d->hops = hops;

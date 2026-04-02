@@ -13,6 +13,7 @@ static uint8_t status_led_r = 0;
 static uint8_t status_led_g = 0;
 static uint8_t status_led_b = 0;
 static bool status_led_solid = false;
+static bool status_led_enabled = false;
 
 #ifndef ALERT_LED_GPIO
 #define ALERT_LED_GPIO 4
@@ -28,6 +29,11 @@ static void set_alert_led(bool on) {
 }
 
 static void set_led(uint8_t r, uint8_t g, uint8_t b) {
+    if (!status_led_enabled && (r != 0 || g != 0 || b != 0)) {
+        r = 0;
+        g = 0;
+        b = 0;
+    }
     led_strip_clear(led_strip);
     vTaskDelay(pdMS_TO_TICKS(5));
     led_strip_set_pixel(led_strip, 0, g, r, b);
@@ -62,14 +68,26 @@ static void set_temporary_status_led(uint8_t r, uint8_t g, uint8_t b, uint32_t d
 }
 
 static void led_root(void) {
+    if (!status_led_enabled) {
+        set_led(0, 0, 0);
+        return;
+    }
     set_temporary_status_led(0, 0, 255, 5000);
 }
 
 static void led_child(void) {
+    if (!status_led_enabled) {
+        set_led(0, 0, 0);
+        return;
+    }
     set_temporary_status_led(0, 255, 0, 5000);
 }
 
 static void led_isolated(void) {
+    if (!status_led_enabled) {
+        set_led(0, 0, 0);
+        return;
+    }
     status_led_r = 255;
     status_led_g = 0;
     status_led_b = 0;
@@ -79,6 +97,10 @@ static void led_isolated(void) {
 }
 
 static void blink_orange(int times) {
+    if (!status_led_enabled) {
+        set_led(0, 0, 0);
+        return;
+    }
     for (int i = 0; i < times; i++) {
         set_led(255, 165, 0);
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -136,6 +158,7 @@ static void init_led_strip(void) {
         .flags.with_dma = false
     };
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&sc, &rc, &led_strip));
+    status_led_enabled = false;
     set_led(0, 0, 0);
 }
 

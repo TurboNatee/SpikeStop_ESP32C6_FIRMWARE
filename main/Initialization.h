@@ -65,6 +65,7 @@ float temperature_read_c_quiet(void);
 float battery_read_voltage(void);
 int battery_estimate_percent(float vbat);
 bool ir_get_last_signal_mv(int *mv_out);
+bool ir_get_last_signal_uv(int32_t *uv_out);
 bool ir_get_last_broken(bool *broken_out);
 void queue_influxdb_data(const char *node_mac,
                         int sensor_value,
@@ -72,6 +73,7 @@ void queue_influxdb_data(const char *node_mac,
                         int battery_cv,
                         int battery_pct,
                         int ir_signal_mv,
+                        int ir_signal_uv,
                         int ir_broken,
                         int8_t rssi,
                         int hops);
@@ -91,6 +93,8 @@ static int root_last_temp = 0;
 static int root_last_ir_signal = -999;
 static int root_last_ir_broken = -1;
 static bool root_in_alert = false;
+static int root_trigger_confirm_count = 0;
+static int root_clear_confirm_count = 0;
 
 static void root_spike_evaluate(int sv, int t, int ir_signal_to_send, int ir_broken_to_send) {
     (void)ir_signal_to_send;
@@ -110,19 +114,39 @@ static void root_spike_evaluate(int sv, int t, int ir_signal_to_send, int ir_bro
     bool clear_now = (turb_delta <= SPIKE_TURBIDITY_CLEAR_CV) &&
                      (temp_delta <= SPIKE_TEMP_CLEAR_C);
 
-    if (!root_in_alert && trigger_now) {
-        root_in_alert = true;
-        alert_led_effect();
-        ESP_LOGW(TAG,
-                 "Root spike alert: dTurb=%d dTemp=%d",
-                 turb_delta,
-                 temp_delta);
-    } else if (root_in_alert && clear_now) {
-        root_in_alert = false;
-        ESP_LOGI(TAG,
-                 "Root spike cleared: dTurb=%d dTemp=%d",
-                 turb_delta,
-                 temp_delta);
+    if (!root_in_alert) {
+        if (trigger_now) {
+            root_trigger_confirm_count++;
+            if (root_trigger_confirm_count >= 2) {
+                root_in_alert = true;
+                root_trigger_confirm_count = 0;
+                root_clear_confirm_count = 0;
+                alert_led_effect();
+                ESP_LOGW(TAG,
+                         "Local spike alert: dTurb=%d dTemp=%d",
+                         turb_delta,
+                         temp_delta);
+                root_last_sensor = sv;
+                root_last_temp = t;
+            }
+            return;
+        }
+
+        root_trigger_confirm_count = 0;
+    } else {
+        if (clear_now) {
+            root_clear_confirm_count++;
+            if (root_clear_confirm_count >= 2) {
+                root_in_alert = false;
+                root_clear_confirm_count = 0;
+                ESP_LOGI(TAG,
+                         "Local spike cleared: dTurb=%d dTemp=%d",
+                         turb_delta,
+                         temp_delta);
+            }
+        } else {
+            root_clear_confirm_count = 0;
+        }
     }
 
     root_last_sensor = sv;
@@ -130,7 +154,7 @@ static void root_spike_evaluate(int sv, int t, int ir_signal_to_send, int ir_bro
 }
 
 static void process_fast_alert_check(void) {
-    if (role != ROLE_ROOT || !turbidity_sensor_present) {
+    if (!turbidity_sensor_present) {
         return;
     }
 
@@ -214,8 +238,10 @@ void process_auto_send(void) {
         }
 
         int ir_signal_mv = 0;
+        int32_t ir_signal_uv = 0;
         bool ir_broken = true;
         int ir_signal_to_send = ir_get_last_signal_mv(&ir_signal_mv) ? ir_signal_mv : -999;
+        int ir_signal_uv_to_send = ir_get_last_signal_uv(&ir_signal_uv) ? (int)ir_signal_uv : -999000;
         int ir_broken_to_send = ir_get_last_broken(&ir_broken) ? (ir_broken ? 1 : 0) : -1;
 
         int battery_cv = !isnan(vbat) ? (int)lroundf(vbat * 100.0f) : -1;
@@ -227,6 +253,7 @@ void process_auto_send(void) {
                             battery_cv,
                             battery_pct_to_send,
                             ir_signal_to_send,
+                            ir_signal_uv_to_send,
                             ir_broken_to_send,
                             -65,
                             0);

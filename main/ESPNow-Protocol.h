@@ -80,6 +80,7 @@ void queue_influxdb_data(const char *node_mac,
                         int battery_cv,
                         int battery_pct,
                         int ir_signal_mv,
+                        int ir_signal_uv,
                         int ir_broken,
                         int8_t rssi,
                         int hops);
@@ -339,17 +340,29 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
                 int battery_cv = -1;
                 int battery_pct = -1;
                 int ir_signal_mv = -999;
+                int ir_signal_uv = -999000;
                 int ir_broken = -1;
 
                 bool parsed = false;
                 if (sscanf((char*)dp->payload,
-                           "N:%*2x%*2x S:%d T:%d V:%d P:%d I:%d B:%d",
+                           "N:%*2x%*2x S:%d T:%d V:%d P:%d I:%d U:%d B:%d",
                            &sensor_value,
                            &temperature,
                            &battery_cv,
                            &battery_pct,
                            &ir_signal_mv,
+                           &ir_signal_uv,
                            &ir_broken) == 6) {
+                    parsed = true;
+                } else if (sscanf((char*)dp->payload,
+                                  "N:%*2x%*2x S:%d T:%d V:%d P:%d I:%d B:%d",
+                                  &sensor_value,
+                                  &temperature,
+                                  &battery_cv,
+                                  &battery_pct,
+                                  &ir_signal_mv,
+                                  &ir_broken) == 6) {
+                    ir_signal_uv = ir_signal_mv * 1000;
                     parsed = true;
                 } else if (sscanf((char*)dp->payload,
                                   "Node:%*s SENSOR:%d TEMP:%dC",
@@ -365,6 +378,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
                                         battery_cv,
                                         battery_pct,
                                         ir_signal_mv,
+                                        ir_signal_uv,
                                         ir_broken,
                                         dp->hdr.rssi,
                                         dp->hdr.hop_count);
@@ -403,21 +417,42 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
                                              (temp_delta <= SPIKE_TEMP_CLEAR_C);
 
                             float alert_delta = (float)turb_delta;
-                            if (!state->in_alert && trigger_now) {
-                                state->in_alert = true;
-                                send_alert_notification(dp->src_mac, alert_delta);
-                                ESP_LOGW(TAG,
-                                         "Spike alert %s: dTurb=%d dTemp=%d",
-                                         src,
-                                         turb_delta,
-                                         temp_delta);
-                            } else if (state->in_alert && clear_now) {
-                                state->in_alert = false;
-                                ESP_LOGI(TAG,
-                                         "Spike cleared %s: dTurb=%d dTemp=%d",
-                                         src,
-                                         turb_delta,
-                                         temp_delta);
+                            if (!state->in_alert) {
+                                if (trigger_now) {
+                                    state->trigger_confirm_count++;
+                                    if (state->trigger_confirm_count >= 2) {
+                                        state->in_alert = true;
+                                        state->trigger_confirm_count = 0;
+                                        state->clear_confirm_count = 0;
+                                        send_alert_notification(dp->src_mac, alert_delta);
+                                        ESP_LOGW(TAG,
+                                                 "Spike alert %s: dTurb=%d dTemp=%d",
+                                                 src,
+                                                 turb_delta,
+                                                 temp_delta);
+                                        state->last_sensor_value = sensor_value;
+                                        state->last_temperature = temperature;
+                                        state->last_ir_signal_mv = ir_signal_mv;
+                                        state->last_ir_broken = ir_broken;
+                                    }
+                                    break;
+                                }
+                                state->trigger_confirm_count = 0;
+                            } else {
+                                if (clear_now) {
+                                    state->clear_confirm_count++;
+                                    if (state->clear_confirm_count >= 2) {
+                                        state->in_alert = false;
+                                        state->clear_confirm_count = 0;
+                                        ESP_LOGI(TAG,
+                                                 "Spike cleared %s: dTurb=%d dTemp=%d",
+                                                 src,
+                                                 turb_delta,
+                                                 temp_delta);
+                                    }
+                                } else {
+                                    state->clear_confirm_count = 0;
+                                }
                             }
 
                             state->last_sensor_value = sensor_value;
